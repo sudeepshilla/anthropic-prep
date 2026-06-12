@@ -1,5 +1,13 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
+from database import engine
+from database import SessionLocal
+from database import Base
+from models import IncidentDB
+
+import models
+
+Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 
@@ -44,12 +52,71 @@ def create_incident(incident: Incident):
     else:
         priority = "P3"
 
+    db = SessionLocal()
+
+    db_incident = IncidentDB(
+        application=incident.application,
+        severity=incident.severity,
+        description=incident.description,
+        priority=priority
+    )
+
+    db.add(db_incident)
+    db.commit()
+    db.refresh(db_incident)
+
+    db.close()
+
     return {
-        "status": "received",
+        "id": db_incident.id,
+        "application": db_incident.application,
+        "severity": db_incident.severity,
+        "description": db_incident.description,
+        "priority": db_incident.priority
+    }
+
+@app.get("/incidents")
+def get_incidents():
+
+    db = SessionLocal()
+
+    incidents = db.query(IncidentDB).all()
+
+    result = []
+
+    for incident in incidents:
+        result.append({
+            "id": incident.id,
+            "application": incident.application,
+            "severity": incident.severity,
+            "description": incident.description,
+            "priority": incident.priority
+        })
+
+    db.close()
+
+    return result
+
+@app.get("/incident/{incident_id}")
+def get_incident(incident_id: int):
+
+    db = SessionLocal()
+
+    incident = db.query(IncidentDB).filter(
+        IncidentDB.id == incident_id
+    ).first()
+
+    db.close()
+
+    if incident is None:
+        return {"error": "Incident not found"}
+
+    return {
+        "id": incident.id,
         "application": incident.application,
         "severity": incident.severity,
-        "priority": priority,
-        "summary": f"Incident logged for {incident.application}"
+        "description": incident.description,
+        "priority": incident.priority
     }
 
 @app.post("/analyze")
