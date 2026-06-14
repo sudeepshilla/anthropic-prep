@@ -4,10 +4,19 @@ from database import engine
 from database import SessionLocal
 from database import Base
 from models import IncidentDB
+from anthropic import Anthropic
+from dotenv import load_dotenv
 
+import os
 import models
 
 Base.metadata.create_all(bind=engine)
+
+load_dotenv()
+
+client = Anthropic(
+    api_key=os.environ["ANTHROPIC_API_KEY"]
+)
 
 app = FastAPI()
 
@@ -139,4 +148,39 @@ def analyze_issue(request: AnalysisRequest):
     return {
         "application": request.application,
         "possible_causes": causes
+    }
+
+@app.post("/analyze-ai")
+def analyze_ai(request: AnalysisRequest):
+
+    prompt = f"""
+    You are a senior integration architect.
+
+    Analyze this incident:
+
+    Application: {request.application}
+
+    Error:
+    {request.error}
+
+    Provide:
+    1. Root cause analysis
+    2. Possible causes
+    3. Recommended actions
+    """
+
+    message = client.messages.create(
+        model="claude-sonnet-4-5",
+        max_tokens=500,
+        messages=[
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ]
+    )
+
+    return {
+        "application": request.application,
+        "analysis": message.content[0].text
     }
